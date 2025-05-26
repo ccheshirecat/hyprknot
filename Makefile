@@ -91,6 +91,28 @@ run: build
 install: build
 	@echo "Installing $(BINARY_NAME)..."
 
+	# Check if KnotDNS is installed
+	@if ! command -v knotc >/dev/null 2>&1; then \
+		echo "Error: knotc command not found. Please install KnotDNS first."; \
+		echo "On Ubuntu/Debian: apt install knot"; \
+		echo "On CentOS/RHEL: yum install knot"; \
+		exit 1; \
+	fi
+
+	# Create hyprknot user if it doesn't exist
+	@if ! id hyprknot >/dev/null 2>&1; then \
+		echo "Creating hyprknot user..."; \
+		sudo useradd --system --shell /bin/false --no-create-home hyprknot; \
+	fi
+
+	# Add hyprknot user to knot group for socket access
+	@if getent group knot >/dev/null 2>&1; then \
+		sudo usermod -a -G knot hyprknot; \
+		echo "Added hyprknot user to knot group"; \
+	else \
+		echo "Warning: knot group not found. Ensure KnotDNS is properly installed."; \
+	fi
+
 	# Create directories
 	sudo mkdir -p $(CONFIG_DIR)
 	sudo mkdir -p $(LOG_DIR)
@@ -110,6 +132,7 @@ install: build
 
 	# Set permissions
 	sudo chown hyprknot:hyprknot $(LOG_DIR)
+	sudo chown hyprknot:hyprknot $(CONFIG_DIR)
 
 	@echo "Installation complete"
 	@echo "Edit $(CONFIG_DIR)/config.yaml and run 'sudo systemctl enable --now hyprknot' to start"
