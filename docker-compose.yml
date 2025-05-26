@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  hyprknot:
+    build: .
+    container_name: hyprknot
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config.yaml:/etc/hyprknot/config.yaml:ro
+      - hyprknot-logs:/var/log/hyprknot
+      # Mount KnotDNS socket if running on host
+      - /run/knot/knot.sock:/run/knot/knot.sock
+    environment:
+      - GIN_MODE=release
+    networks:
+      - hyprknot-net
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      - knot
+    labels:
+      - "com.hyprknot.service=api"
+      - "com.hyprknot.version=1.0.0"
+
+  # Optional: KnotDNS container (if not running on host)
+  knot:
+    image: cznic/knot:latest
+    container_name: knot-dns
+    restart: unless-stopped
+    ports:
+      - "53:53/udp"
+      - "53:53/tcp"
+    volumes:
+      - knot-config:/etc/knot
+      - knot-data:/var/lib/knot
+      - knot-run:/run/knot
+    networks:
+      - hyprknot-net
+    command: ["knotd", "-c", "/etc/knot/knot.conf"]
+
+volumes:
+  hyprknot-logs:
+    driver: local
+  knot-config:
+    driver: local
+  knot-data:
+    driver: local
+  knot-run:
+    driver: local
+
+networks:
+  hyprknot-net:
+    driver: bridge

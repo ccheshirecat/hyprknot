@@ -1,0 +1,52 @@
+[Unit]
+Description=HyprKnot - Lightweight HTTP API wrapper for KnotDNS
+Documentation=https://github.com/hyprknot/hyprknot
+After=network.target knot.service
+Wants=knot.service
+PartOf=knot.service
+
+[Service]
+Type=simple
+User=hyprknot
+Group=hyprknot
+ExecStart=/usr/local/bin/hyprknot -config /etc/hyprknot/config.yaml
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=5
+StartLimitInterval=0
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/knot /var/log/hyprknot /run/knot
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Environment
+Environment=GIN_MODE=release
+Environment=GOMAXPROCS=2
+
+# Working directory
+WorkingDirectory=/var/lib/knot
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hyprknot
+
+[Install]
+WantedBy=multi-user.target
