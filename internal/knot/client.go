@@ -204,7 +204,7 @@ func (c *Client) CreateRecord(zone string, record *DNSRecord) error {
 	// Add the record data
 	args = append(args, record.Data)
 
-	if _, err := c.executeKnotc(args[1:]...); err != nil {
+	if _, err := c.executeKnotc(args...); err != nil {
 		// Abort transaction on error
 		c.executeKnotc("zone-abort", normalizedZone)
 		return fmt.Errorf("failed to add record to zone %s: %w", zone, err)
@@ -280,7 +280,7 @@ func (c *Client) UpdateRecord(zone, name string, recordType RecordType, updates 
 	// Add the record data
 	args = append(args, existingRecord.Data)
 
-	if _, err := c.executeKnotc(args[1:]...); err != nil {
+	if _, err := c.executeKnotc(args...); err != nil {
 		c.executeKnotc("zone-abort", normalizedZone)
 		return fmt.Errorf("failed to add updated record to zone %s: %w", zone, err)
 	}
