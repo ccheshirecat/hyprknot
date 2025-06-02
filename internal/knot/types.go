@@ -147,6 +147,7 @@ func (r *DNSRecord) ToKnotFormat() string {
 
 	parts = append(parts, r.Name)
 	parts = append(parts, strconv.FormatUint(uint64(r.TTL), 10))
+	parts = append(parts, "IN") // Add class field
 	parts = append(parts, string(r.Type))
 
 	if r.Type == RecordTypeMX && r.Priority != nil {
@@ -160,38 +161,67 @@ func (r *DNSRecord) ToKnotFormat() string {
 
 // ParseKnotRecord parses a record from KnotDNS output format
 func ParseKnotRecord(line string) (*DNSRecord, error) {
+	// Remove brackets and extra whitespace
+	line = strings.TrimSpace(line)
+	if strings.HasPrefix(line, "[") && strings.Contains(line, "]") {
+		// Extract content after the bracket: [zone] record_data
+		bracketEnd := strings.Index(line, "]")
+		if bracketEnd != -1 && bracketEnd < len(line)-1 {
+			line = strings.TrimSpace(line[bracketEnd+1:])
+		}
+	}
+
 	parts := strings.Fields(line)
 	if len(parts) < 4 {
 		return nil, fmt.Errorf("invalid record format: %s", line)
 	}
 
+	// KnotDNS format: name TTL class type data
+	// We need to handle the class field (usually "IN")
+	var name, ttlStr, recordType string
+	var dataStart int
+
+	name = parts[0]
+	ttlStr = parts[1]
+
+	// Check if we have class field (IN)
+	if len(parts) >= 5 && (parts[2] == "IN" || parts[2] == "CH" || parts[2] == "HS") {
+		recordType = parts[3]
+		dataStart = 4
+	} else {
+		recordType = parts[2]
+		dataStart = 3
+	}
+
 	record := &DNSRecord{
-		Name: parts[0],
-		Type: RecordType(parts[2]),
+		Name: name,
+		Type: RecordType(recordType),
 	}
 
 	// Parse TTL
-	ttl, err := strconv.ParseUint(parts[1], 10, 32)
+	ttl, err := strconv.ParseUint(ttlStr, 10, 32)
 	if err != nil {
-		return nil, fmt.Errorf("invalid TTL: %s", parts[1])
+		return nil, fmt.Errorf("invalid TTL: %s", ttlStr)
 	}
 	record.TTL = uint32(ttl)
 
 	// Handle different record types
 	switch record.Type {
 	case RecordTypeMX:
-		if len(parts) < 5 {
+		if len(parts) < dataStart+2 {
 			return nil, fmt.Errorf("invalid MX record format: %s", line)
 		}
-		priority, err := strconv.ParseUint(parts[3], 10, 16)
+		priority, err := strconv.ParseUint(parts[dataStart], 10, 16)
 		if err != nil {
-			return nil, fmt.Errorf("invalid MX priority: %s", parts[3])
+			return nil, fmt.Errorf("invalid MX priority: %s", parts[dataStart])
 		}
 		p := uint16(priority)
 		record.Priority = &p
-		record.Data = parts[4]
+		record.Data = strings.Join(parts[dataStart+1:], " ")
 	default:
-		record.Data = strings.Join(parts[3:], " ")
+		if len(parts) > dataStart {
+			record.Data = strings.Join(parts[dataStart:], " ")
+		}
 	}
 
 	return record, nil

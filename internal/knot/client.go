@@ -29,14 +29,26 @@ func NewClient(knotcPath, socketPath string, allowedZones []string, logger *logr
 	}
 }
 
+// normalizeZoneName ensures zone name has proper DNS format
+func normalizeZoneName(zone string) string {
+	if !strings.HasSuffix(zone, ".") {
+		return zone + "."
+	}
+	return zone
+}
+
 // IsZoneAllowed checks if a zone is in the allowed zones list
 func (c *Client) IsZoneAllowed(zone string) bool {
 	if len(c.allowedZones) == 0 {
 		return true // If no restrictions, allow all zones
 	}
 
+	// Normalize the zone name to canonical form
+	normalizedZone := normalizeZoneName(zone)
+
 	for _, allowedZone := range c.allowedZones {
-		if zone == allowedZone || strings.HasSuffix(zone, "."+allowedZone) {
+		normalizedAllowed := normalizeZoneName(allowedZone)
+		if normalizedZone == normalizedAllowed || strings.HasSuffix(normalizedZone, "."+normalizedAllowed) {
 			return true
 		}
 	}
@@ -100,7 +112,9 @@ func (c *Client) GetRecords(zone string) ([]DNSRecord, error) {
 		return nil, fmt.Errorf("zone not allowed: %s", zone)
 	}
 
-	output, err := c.executeKnotc("zone-read", zone)
+	// Use normalized zone name for KnotDNS commands
+	normalizedZone := normalizeZoneName(zone)
+	output, err := c.executeKnotc("zone-read", normalizedZone)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read zone %s: %w", zone, err)
 	}
@@ -168,21 +182,24 @@ func (c *Client) CreateRecord(zone string, record *DNSRecord) error {
 		}
 	}
 
+	// Use normalized zone name for KnotDNS commands
+	normalizedZone := normalizeZoneName(zone)
+
 	// Begin transaction
-	if _, err := c.executeKnotc("zone-begin", zone); err != nil {
+	if _, err := c.executeKnotc("zone-begin", normalizedZone); err != nil {
 		return fmt.Errorf("failed to begin transaction for zone %s: %w", zone, err)
 	}
 
 	// Add/replace record (zone-set replaces existing records)
 	recordStr := record.ToKnotFormat()
-	if _, err := c.executeKnotc("zone-set", zone, recordStr); err != nil {
+	if _, err := c.executeKnotc("zone-set", normalizedZone, recordStr); err != nil {
 		// Abort transaction on error
-		c.executeKnotc("zone-abort", zone)
+		c.executeKnotc("zone-abort", normalizedZone)
 		return fmt.Errorf("failed to add record to zone %s: %w", zone, err)
 	}
 
 	// Commit transaction
-	if _, err := c.executeKnotc("zone-commit", zone); err != nil {
+	if _, err := c.executeKnotc("zone-commit", normalizedZone); err != nil {
 		return fmt.Errorf("failed to commit transaction for zone %s: %w", zone, err)
 	}
 

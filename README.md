@@ -127,14 +127,14 @@ GET /api/v1/zones/example.com/records/host/A
 
 #### Create PTR Record (Perfect for VMs)
 ```bash
-POST /api/v1/zones/10.in-addr.arpa/records
+POST /api/v1/zones/143.31.194.in-addr.arpa/records
 Content-Type: application/json
 
 {
-  "name": "100.0.0.10.in-addr.arpa",
+  "name": "100.143.31.194.in-addr.arpa",
   "type": "PTR",
-  "ttl": 300,
-  "data": "vm-customer-1.example.com."
+  "ttl": 900,
+  "data": "vm-customer-1.hypr.tech."
 }
 ```
 
@@ -177,19 +177,19 @@ POST /api/v1/zones/example.com/reload
 Perfect for VM hosting providers:
 
 ```bash
-# When provisioning a new VM at 10.0.0.100 for customer "acme"
+# When provisioning a new VM at 194.31.143.100 for customer "acme"
 
 # 1. Create A record
 curl -X POST -H "X-API-Key: $API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"name":"vm-acme","type":"A","ttl":300,"data":"10.0.0.100"}' \
-  http://dns-api:8080/api/v1/zones/customers.example.com/records
+  -d '{"name":"vm-acme","type":"A","ttl":900,"data":"194.31.143.100"}' \
+  http://100.100.10.80:8080/api/v1/zones/hypr.tech/records
 
-# 2. Create PTR record  
+# 2. Create PTR record
 curl -X POST -H "X-API-Key: $API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"name":"100.0.0.10.in-addr.arpa","type":"PTR","ttl":300,"data":"vm-acme.customers.example.com."}' \
-  http://dns-api:8080/api/v1/zones/10.in-addr.arpa/records
+  -d '{"name":"100.143.31.194.in-addr.arpa","type":"PTR","ttl":900,"data":"vm-acme.hypr.tech."}' \
+  http://100.100.10.80:8080/api/v1/zones/143.31.194.in-addr.arpa/records
 ```
 
 ## 🔒 Security
