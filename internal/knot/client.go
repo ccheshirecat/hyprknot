@@ -205,15 +205,28 @@ func (c *Client) CreateRecord(zone string, record *DNSRecord) error {
 
 	// Add/replace record (zone-set replaces existing records)
 	// KnotDNS zone-set expects: zone-set <zone> <owner> <ttl> <type> <rdata>
-	// For relative names within the zone, we need to remove the zone suffix
+	// For PTR records in reverse zones, we need to extract just the host part
 	recordName := record.Name
-	if strings.HasSuffix(recordName, "."+normalizedZone) {
+
+	// Remove trailing dot from record name for processing
+	recordNameClean := strings.TrimSuffix(recordName, ".")
+	zoneNameClean := strings.TrimSuffix(normalizedZone, ".")
+
+	// For reverse DNS zones, extract just the IP octet
+	if strings.HasSuffix(recordNameClean, "."+zoneNameClean) {
 		// Convert absolute name to relative by removing zone suffix
-		recordName = strings.TrimSuffix(recordName, "."+normalizedZone)
-	} else if strings.HasSuffix(recordName, normalizedZone) {
-		// Handle case where zone doesn't have trailing dot in record name
-		recordName = strings.TrimSuffix(recordName, normalizedZone)
+		recordName = strings.TrimSuffix(recordNameClean, "."+zoneNameClean)
+	} else if strings.HasSuffix(recordNameClean, zoneNameClean) {
+		// Handle case where record name ends with zone name directly
+		recordName = strings.TrimSuffix(recordNameClean, zoneNameClean)
 		recordName = strings.TrimSuffix(recordName, ".")
+	} else {
+		// For PTR records, try to extract just the first part (IP octet)
+		parts := strings.Split(recordNameClean, ".")
+		if len(parts) > 0 && strings.Contains(recordNameClean, zoneNameClean) {
+			// Extract just the first part (e.g., "6" from "6.143.31.194.in-addr.arpa")
+			recordName = parts[0]
+		}
 	}
 
 	args := []string{"zone-set", normalizedZone, recordName,
@@ -292,15 +305,28 @@ func (c *Client) UpdateRecord(zone, name string, recordType RecordType, updates 
 	}
 
 	// Add updated record using separate arguments
-	// For relative names within the zone, we need to remove the zone suffix
+	// For PTR records in reverse zones, we need to extract just the host part
 	recordName := existingRecord.Name
-	if strings.HasSuffix(recordName, "."+normalizedZone) {
+
+	// Remove trailing dot from record name for processing
+	recordNameClean := strings.TrimSuffix(recordName, ".")
+	zoneNameClean := strings.TrimSuffix(normalizedZone, ".")
+
+	// For reverse DNS zones, extract just the IP octet
+	if strings.HasSuffix(recordNameClean, "."+zoneNameClean) {
 		// Convert absolute name to relative by removing zone suffix
-		recordName = strings.TrimSuffix(recordName, "."+normalizedZone)
-	} else if strings.HasSuffix(recordName, normalizedZone) {
-		// Handle case where zone doesn't have trailing dot in record name
-		recordName = strings.TrimSuffix(recordName, normalizedZone)
+		recordName = strings.TrimSuffix(recordNameClean, "."+zoneNameClean)
+	} else if strings.HasSuffix(recordNameClean, zoneNameClean) {
+		// Handle case where record name ends with zone name directly
+		recordName = strings.TrimSuffix(recordNameClean, zoneNameClean)
 		recordName = strings.TrimSuffix(recordName, ".")
+	} else {
+		// For PTR records, try to extract just the first part (IP octet)
+		parts := strings.Split(recordNameClean, ".")
+		if len(parts) > 0 && strings.Contains(recordNameClean, zoneNameClean) {
+			// Extract just the first part (e.g., "6" from "6.143.31.194.in-addr.arpa")
+			recordName = parts[0]
+		}
 	}
 
 	args := []string{"zone-set", normalizedZone, recordName,
