@@ -151,8 +151,20 @@ func (c *Client) GetRecord(zone, name string, recordType RecordType) (*DNSRecord
 		return nil, err
 	}
 
+	// Normalize the search name for comparison
+	searchName := name
+	if !strings.HasSuffix(searchName, ".") {
+		searchName += "."
+	}
+
 	for _, record := range records {
-		if record.Name == name && record.Type == recordType {
+		// Normalize the record name for comparison
+		recordName := record.Name
+		if !strings.HasSuffix(recordName, ".") {
+			recordName += "."
+		}
+
+		if recordName == searchName && record.Type == recordType {
 			return &record, nil
 		}
 	}
@@ -322,25 +334,29 @@ func (c *Client) DeleteRecord(zone, name string, recordType RecordType) error {
 		return fmt.Errorf("zone not allowed: %s", zone)
 	}
 
-	// Check if record exists
-	if _, err := c.GetRecord(zone, name, recordType); err != nil {
+	// Check if record exists and get the full record for precise deletion
+	existingRecord, err := c.GetRecord(zone, name, recordType)
+	if err != nil {
 		return fmt.Errorf("record not found: %w", err)
 	}
 
+	// Use normalized zone name for KnotDNS commands
+	normalizedZone := normalizeZoneName(zone)
+
 	// Begin transaction
-	if _, err := c.executeKnotc("zone-begin", zone); err != nil {
+	if _, err := c.executeKnotc("zone-begin", normalizedZone); err != nil {
 		return fmt.Errorf("failed to begin transaction for zone %s: %w", zone, err)
 	}
 
-	// Remove record
-	recordStr := fmt.Sprintf("%s %s", name, recordType)
-	if _, err := c.executeKnotc("zone-unset", zone, recordStr); err != nil {
-		c.executeKnotc("zone-abort", zone)
+	// Remove record using the full record string for precision
+	recordStr := existingRecord.ToKnotFormat()
+	if _, err := c.executeKnotc("zone-unset", normalizedZone, recordStr); err != nil {
+		c.executeKnotc("zone-abort", normalizedZone)
 		return fmt.Errorf("failed to remove record from zone %s: %w", zone, err)
 	}
 
 	// Commit transaction
-	if _, err := c.executeKnotc("zone-commit", zone); err != nil {
+	if _, err := c.executeKnotc("zone-commit", normalizedZone); err != nil {
 		return fmt.Errorf("failed to commit transaction for zone %s: %w", zone, err)
 	}
 
