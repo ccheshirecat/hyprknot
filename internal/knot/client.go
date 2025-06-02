@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -191,8 +192,19 @@ func (c *Client) CreateRecord(zone string, record *DNSRecord) error {
 	}
 
 	// Add/replace record (zone-set replaces existing records)
-	recordStr := record.ToKnotFormat()
-	if _, err := c.executeKnotc("zone-set", normalizedZone, recordStr); err != nil {
+	// KnotDNS zone-set expects: zone-set <zone> <owner> <ttl> <type> <rdata>
+	args := []string{"zone-set", normalizedZone, record.Name,
+		strconv.FormatUint(uint64(record.TTL), 10), string(record.Type)}
+
+	// Add priority for MX records
+	if record.Type == RecordTypeMX && record.Priority != nil {
+		args = append(args, strconv.FormatUint(uint64(*record.Priority), 10))
+	}
+
+	// Add the record data
+	args = append(args, record.Data)
+
+	if _, err := c.executeKnotc(args[1:]...); err != nil {
 		// Abort transaction on error
 		c.executeKnotc("zone-abort", normalizedZone)
 		return fmt.Errorf("failed to add record to zone %s: %w", zone, err)
@@ -204,9 +216,9 @@ func (c *Client) CreateRecord(zone string, record *DNSRecord) error {
 	}
 
 	if existingRecord != nil {
-		c.logger.Infof("Replaced existing record: %s in zone %s", recordStr, zone)
+		c.logger.Infof("Replaced existing record: %s %s in zone %s", record.Name, record.Type, zone)
 	} else {
-		c.logger.Infof("Created record: %s in zone %s", recordStr, zone)
+		c.logger.Infof("Created record: %s %s in zone %s", record.Name, record.Type, zone)
 	}
 	return nil
 }
@@ -242,29 +254,43 @@ func (c *Client) UpdateRecord(zone, name string, recordType RecordType, updates 
 		return fmt.Errorf("invalid updated record: %w", err)
 	}
 
+	// Use normalized zone name for KnotDNS commands
+	normalizedZone := normalizeZoneName(zone)
+
 	// Begin transaction
-	if _, err := c.executeKnotc("zone-begin", zone); err != nil {
+	if _, err := c.executeKnotc("zone-begin", normalizedZone); err != nil {
 		return fmt.Errorf("failed to begin transaction for zone %s: %w", zone, err)
 	}
 
 	// Remove old record using full record string for precision
-	if _, err := c.executeKnotc("zone-unset", zone, originalRecordStr); err != nil {
-		c.executeKnotc("zone-abort", zone)
+	if _, err := c.executeKnotc("zone-unset", normalizedZone, originalRecordStr); err != nil {
+		c.executeKnotc("zone-abort", normalizedZone)
 		return fmt.Errorf("failed to remove old record from zone %s: %w", zone, err)
 	}
 
-	newRecordStr := existingRecord.ToKnotFormat()
-	if _, err := c.executeKnotc("zone-set", zone, newRecordStr); err != nil {
-		c.executeKnotc("zone-abort", zone)
+	// Add updated record using separate arguments
+	args := []string{"zone-set", normalizedZone, existingRecord.Name,
+		strconv.FormatUint(uint64(existingRecord.TTL), 10), string(existingRecord.Type)}
+
+	// Add priority for MX records
+	if existingRecord.Type == RecordTypeMX && existingRecord.Priority != nil {
+		args = append(args, strconv.FormatUint(uint64(*existingRecord.Priority), 10))
+	}
+
+	// Add the record data
+	args = append(args, existingRecord.Data)
+
+	if _, err := c.executeKnotc(args[1:]...); err != nil {
+		c.executeKnotc("zone-abort", normalizedZone)
 		return fmt.Errorf("failed to add updated record to zone %s: %w", zone, err)
 	}
 
 	// Commit transaction
-	if _, err := c.executeKnotc("zone-commit", zone); err != nil {
+	if _, err := c.executeKnotc("zone-commit", normalizedZone); err != nil {
 		return fmt.Errorf("failed to commit transaction for zone %s: %w", zone, err)
 	}
 
-	c.logger.Infof("Updated record: %s in zone %s", newRecordStr, zone)
+	c.logger.Infof("Updated record: %s %s in zone %s", existingRecord.Name, existingRecord.Type, zone)
 	return nil
 }
 
