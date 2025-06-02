@@ -271,9 +271,6 @@ func (c *Client) UpdateRecord(zone, name string, recordType RecordType, updates 
 		return fmt.Errorf("record not found: %w", err)
 	}
 
-	// Store original record for precise removal
-	originalRecordStr := existingRecord.ToKnotFormat()
-
 	// Apply updates
 	if updates.TTL != nil {
 		existingRecord.TTL = *updates.TTL
@@ -298,8 +295,8 @@ func (c *Client) UpdateRecord(zone, name string, recordType RecordType, updates 
 		return fmt.Errorf("failed to begin transaction for zone %s: %w", zone, err)
 	}
 
-	// Remove old record using full record string for precision
-	if _, err := c.executeKnotc("zone-unset", normalizedZone, originalRecordStr); err != nil {
+	// Remove old record using name and type only (simpler and more reliable)
+	if _, err := c.executeKnotc("zone-unset", normalizedZone, existingRecord.Name, string(existingRecord.Type)); err != nil {
 		c.executeKnotc("zone-abort", normalizedZone)
 		return fmt.Errorf("failed to remove old record from zone %s: %w", zone, err)
 	}
@@ -374,9 +371,8 @@ func (c *Client) DeleteRecord(zone, name string, recordType RecordType) error {
 		return fmt.Errorf("failed to begin transaction for zone %s: %w", zone, err)
 	}
 
-	// Remove record using the full record string for precision
-	recordStr := existingRecord.ToKnotFormat()
-	if _, err := c.executeKnotc("zone-unset", normalizedZone, recordStr); err != nil {
+	// Remove record using name and type only (simpler and more reliable)
+	if _, err := c.executeKnotc("zone-unset", normalizedZone, existingRecord.Name, string(existingRecord.Type)); err != nil {
 		c.executeKnotc("zone-abort", normalizedZone)
 		return fmt.Errorf("failed to remove record from zone %s: %w", zone, err)
 	}
