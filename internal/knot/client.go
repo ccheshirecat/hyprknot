@@ -193,7 +193,18 @@ func (c *Client) CreateRecord(zone string, record *DNSRecord) error {
 
 	// Add/replace record (zone-set replaces existing records)
 	// KnotDNS zone-set expects: zone-set <zone> <owner> <ttl> <type> <rdata>
-	args := []string{"zone-set", normalizedZone, record.Name,
+	// For relative names within the zone, we need to remove the zone suffix
+	recordName := record.Name
+	if strings.HasSuffix(recordName, "."+normalizedZone) {
+		// Convert absolute name to relative by removing zone suffix
+		recordName = strings.TrimSuffix(recordName, "."+normalizedZone)
+	} else if strings.HasSuffix(recordName, normalizedZone) {
+		// Handle case where zone doesn't have trailing dot in record name
+		recordName = strings.TrimSuffix(recordName, normalizedZone)
+		recordName = strings.TrimSuffix(recordName, ".")
+	}
+
+	args := []string{"zone-set", normalizedZone, recordName,
 		strconv.FormatUint(uint64(record.TTL), 10), string(record.Type)}
 
 	// Add priority for MX records
@@ -269,7 +280,18 @@ func (c *Client) UpdateRecord(zone, name string, recordType RecordType, updates 
 	}
 
 	// Add updated record using separate arguments
-	args := []string{"zone-set", normalizedZone, existingRecord.Name,
+	// For relative names within the zone, we need to remove the zone suffix
+	recordName := existingRecord.Name
+	if strings.HasSuffix(recordName, "."+normalizedZone) {
+		// Convert absolute name to relative by removing zone suffix
+		recordName = strings.TrimSuffix(recordName, "."+normalizedZone)
+	} else if strings.HasSuffix(recordName, normalizedZone) {
+		// Handle case where zone doesn't have trailing dot in record name
+		recordName = strings.TrimSuffix(recordName, normalizedZone)
+		recordName = strings.TrimSuffix(recordName, ".")
+	}
+
+	args := []string{"zone-set", normalizedZone, recordName,
 		strconv.FormatUint(uint64(existingRecord.TTL), 10), string(existingRecord.Type)}
 
 	// Add priority for MX records
